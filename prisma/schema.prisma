@@ -1,0 +1,357 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  GUEST
+  MEMBER
+  VERIFIED_MEMBER
+  MODERATOR
+  ADMIN
+}
+
+enum ProfileType {
+  ATHLETE
+  GAMER
+  CHESS_PLAYER
+  PUBLIC_FIGURE
+  INFLUENCER
+  DEFAULT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AgeGroup {
+  UNDER_18
+  AGE_18_24
+  AGE_25_34
+  OVER_34
+}
+
+enum Category {
+  FITNESS
+  PUBG
+  CHESS
+  SPEED
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ChallengeStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+}
+
+enum OfficeLevel {
+  LOCAL
+  MUNICIPAL
+  DISTRICT
+  PROVINCIAL
+  NATIONAL
+}
+
+enum TrendDirection {
+  UP
+  DOWN
+  STABLE
+}
+
+enum ReportTargetType {
+  USER
+  STAT
+  LEADER
+  COMMENT
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  supabaseId           String    @unique
+  email                String    @unique
+  username             String    @unique
+  displayName          String
+  fullName             String?
+  gender               Gender    @default(OTHER)
+  ageGroup             AgeGroup  @default(AGE_18_24)
+  city                 String?
+  district             String?
+  province             String?
+  bio                  String?
+  avatarUrl            String?
+  role                 Role      @default(MEMBER)
+  profileType          ProfileType @default(DEFAULT)
+  isPremium            Boolean   @default(false)
+  premiumUntil         DateTime?
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  isVerified           Boolean   @default(false)
+  verifiedAt           DateTime?
+  isBanned             Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  stats            CategoryStat[]
+  statEntries      StatEntry[]
+  challengeEntries ChallengeEntry[]
+  votes            PublicFigureVote[]
+  reportsGiven     Report[]          @relation("ReporterRelation")
+  followers        Follow[]          @relation("FollowingRelation")
+  following        Follow[]          @relation("FollowerRelation")
+  notifications    Notification[]
+  adminActions     AdminAction[]
+
+  @@index([username])
+  @@index([province])
+  @@index([city])
+  @@index([role])
+}
+
+model CategoryStat {
+  id       String   @id @default(cuid())
+  userId   String
+  category Category
+
+  // FITNESS
+  benchPressMax      Float?
+  squatMax           Float?
+  deadliftMax        Float?
+  overheadPressMax   Float?
+  pullUpsMax         Int?
+  pushUpsMax         Int?
+  bodyweightKg       Float?
+  consistencyStreak  Int?
+  totalVolumeKg      Float?
+
+  // PUBG
+  kdRatio         Float?
+  rankTier        String?
+  totalWins       Int?
+  top10Rate       Float?
+  avgDamage       Float?
+  headshotPct     Float?
+  totalMatches    Int?
+  soloKd          Float?
+  duoKd           Float?
+  squadKd         Float?
+  currentSeason   String?
+
+  // CHESS
+  chessRating           Int?
+  chessUsername         String?
+  winRate               Float?
+  winStreak             Int?
+  totalGames            Int?
+  tournamentPlacements  Int?
+
+  // SPEED
+  sprintTimeSec        Float?
+  reactionTimeMs       Float?
+  tappingSpeed         Int?
+  challengeCompletions Int?
+  bestReactionMs       Float?
+
+  rankScore      Float   @default(0)
+  cityRank       Int?
+  provinceRank   Int?
+  nationalRank   Int?
+  genderRank     Int?
+  ageGroupRank   Int?
+  isVerified     Boolean @default(false)
+  proofUrl       String?
+  lastUpdated    DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@index([category])
+  @@index([rankScore])
+  @@index([nationalRank])
+}
+
+model StatEntry {
+  id         String           @id @default(cuid())
+  userId     String
+  category   Category
+  field      String
+  value      String
+  proofUrl   String?
+  notes      String?
+  status     SubmissionStatus @default(PENDING)
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([userId])
+  @@index([category])
+}
+
+model PublicFigure {
+  id             String        @id @default(cuid())
+  name           String
+  office         String
+  officeLevel    OfficeLevel
+  region         String?
+  province       String?
+  party          String?
+  description    String?
+  photoUrl       String?
+  isVerified     Boolean       @default(false)
+  isActive       Boolean       @default(true)
+  isPromoted     Boolean       @default(false)
+  promotedUntil  DateTime?
+  approvalScore  Float         @default(50)
+  totalVotes     Int           @default(0)
+  trendDirection TrendDirection @default(STABLE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  votes PublicFigureVote[]
+
+  @@index([province])
+  @@index([officeLevel])
+  @@index([approvalScore])
+}
+
+model PublicFigureVote {
+  id        String   @id @default(cuid())
+  figureId  String
+  userId    String
+  rating    Int
+  createdAt DateTime @default(now())
+
+  figure PublicFigure @relation(fields: [figureId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([figureId, userId])
+  @@index([figureId])
+}
+
+model Challenge {
+  id               String          @id @default(cuid())
+  title            String
+  description      String
+  category         Category
+  startDate        DateTime
+  endDate          DateTime
+  prizeDescription String?
+  entryFeeNPR      Int             @default(0)
+  status           ChallengeStatus @default(DRAFT)
+  winnerId         String?
+  createdAt        DateTime        @default(now())
+
+  entries ChallengeEntry[]
+
+  @@index([status])
+  @@index([category])
+}
+
+model ChallengeEntry {
+  id          String   @id @default(cuid())
+  challengeId String
+  userId      String
+  score       Float?
+  proofUrl    String?
+  rank        Int?
+  createdAt   DateTime @default(now())
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, userId])
+  @@index([challengeId])
+}
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("FollowerRelation", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("FollowingRelation", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId])
+}
+
+model Report {
+  id          String           @id @default(cuid())
+  reporterId  String
+  targetType  ReportTargetType
+  targetId    String
+  reason      String
+  description String?
+  status      ReportStatus     @default(PENDING)
+  adminNotes  String?
+  createdAt   DateTime         @default(now())
+
+  reporter User @relation("ReporterRelation", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([targetType, targetId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model AdminAction {
+  id         String   @id @default(cuid())
+  adminId    String
+  actionType String
+  targetType String
+  targetId   String
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+}
+
+model FeaturedContent {
+  id          String   @id @default(cuid())
+  contentType String
+  contentId   String
+  title       String
+  imageUrl    String?
+  startsAt    DateTime
+  endsAt      DateTime
+  isActive    Boolean  @default(true)
+
+  @@index([isActive])
+}
